@@ -1,0 +1,7 @@
+-n "session name"
+-s 1920x1080 # Resolution
+-a # disable audio
+-r # force software decoding
+-pin your_pin_here # specify a PIN code
+
+# see more https://github.com/FDH2/UxPlay?tab=readme-ov-file#usage

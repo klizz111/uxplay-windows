@@ -1,3 +1,4 @@
+# type: ignore
 import os
 import sys
 import logging
@@ -7,6 +8,7 @@ import threading
 import time
 import winreg
 import webbrowser
+import ctypes
 
 from pathlib import Path
 from typing import List, Optional
@@ -22,6 +24,18 @@ LOG_FILE = APPDATA_DIR / f"{APP_NAME}.log"
 
 # ensure the AppData folder exists up front:
 APPDATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# ─── UI Helpers ──────────────────────────────────────────────────────────────
+
+def show_error(msg: str, title: str = "UxPlay Error"):
+    """Show a critical error popup."""
+    # 0x10 = MB_ICONHAND (Error), 0x40000 = MB_TOPMOST
+    ctypes.windll.user32.MessageBoxW(0, msg, title, 0x10 | 0x40000)
+
+def show_warning(msg: str, title: str = "UxPlay Warning"):
+    """Show a warning popup."""
+    # 0x30 = MB_ICONEXCLAMATION (Warning), 0x40000 = MB_TOPMOST
+    ctypes.windll.user32.MessageBoxW(0, msg, title, 0x30 | 0x40000)
 
 # ─── Logging Setup ────────────────────────────────────────────────────────────
 
@@ -94,7 +108,9 @@ class ArgumentManager:
         try:
             return shlex.split(text)
         except ValueError as e:
-            logging.error("Could not parse arguments.txt: %s", e)
+            msg = f"Could not parse arguments.txt:\n{e}"
+            logging.error(msg)
+            show_error(msg)
             return []
 
 # ─── Server Process Manager ──────────────────────────────────────────────────
@@ -108,10 +124,13 @@ class ServerManager:
     def start(self) -> None:
         if self.process and self.process.poll() is None:
             logging.info("UxPlay server already running (PID %s)", self.process.pid)
+            show_warning(f"UxPlay server is already running.\nPID: {self.process.pid}")
             return
 
         if not self.exe_path.exists():
-            logging.error("uxplay.exe not found at %s", self.exe_path)
+            msg = f"uxplay.exe not found at:\n{self.exe_path}"
+            logging.error(msg)
+            show_error(msg)
             return
 
         cmd = [str(self.exe_path)] + self.arg_mgr.read_args()
@@ -122,8 +141,9 @@ class ServerManager:
                 creationflags=subprocess.CREATE_NO_WINDOW
             )
             logging.info("Started UxPlay (PID %s)", self.process.pid)
-        except Exception:
+        except Exception as e:
             logging.exception("Failed to launch UxPlay")
+            show_error(f"Failed to launch UxPlay:\n{e}")
 
     def stop(self) -> None:
         if not (self.process and self.process.poll() is None):
@@ -140,8 +160,9 @@ class ServerManager:
             logging.warning("Did not terminate in time; killing it.")
             self.process.kill()
             self.process.wait()
-        except Exception:
+        except Exception as e:
             logging.exception("Error stopping UxPlay")
+            show_error(f"Error stopping UxPlay:\n{e}")
         finally:
             self.process = None
 
@@ -224,6 +245,12 @@ class TrayIcon:
         self.arg_mgr = arg_mgr
         self.auto_mgr = auto_mgr
 
+        # Log submenu
+        log_menu = pystray.Menu(
+            pystray.MenuItem("Open Log", lambda _: self._open_log()),
+            pystray.MenuItem("Clear Log", lambda _: self._clear_log())
+        )
+
         menu = pystray.Menu(
             pystray.MenuItem("Start UxPlay", lambda _: server_mgr.start()),
             pystray.MenuItem("Stop UxPlay",  lambda _: server_mgr.stop()),
@@ -237,6 +264,7 @@ class TrayIcon:
                 "Edit UxPlay Arguments",
                 lambda _: self._open_args()
             ),
+            pystray.MenuItem("Logs", log_menu),
             pystray.MenuItem(
                 "License",
                 lambda _: webbrowser.open(
@@ -264,8 +292,31 @@ class TrayIcon:
         try:
             os.startfile(str(self.arg_mgr.file_path))
             logging.info("Opened arguments.txt")
-        except Exception:
+        except Exception as e:
             logging.exception("Failed to open arguments.txt")
+            show_error(f"Failed to open arguments.txt:\n{e}")
+
+    def _open_log(self):
+        try:
+            if LOG_FILE.exists():
+                os.startfile(str(LOG_FILE))
+                logging.info("Opened log file")
+            else:
+                logging.warning("Log file does not exist")
+                show_warning("Log file does not exist yet.")
+        except Exception as e:
+            logging.exception("Failed to open log file")
+            show_error(f"Failed to open log file:\n{e}")
+
+    def _clear_log(self):
+        try:
+            # Open in write mode to truncate
+            with open(LOG_FILE, "w", encoding="utf-8") as f:
+                f.write("")
+            logging.info("Log file cleared")
+        except Exception as e:
+            logging.exception("Failed to clear log file")
+            show_error(f"Failed to clear log file:\n{e}")
 
     def _exit(self):
         logging.info("Exiting tray")
@@ -279,6 +330,12 @@ class TrayIcon:
 
 class Application:
     def __init__(self):
+        # Check for existing instance using a named mutex
+        self._mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\UxPlayWindowsTrayMutex")
+        if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            show_error("UxPlay Windows is already running.", "Error")
+            sys.exit(1)
+
         self.paths = Paths()
         self.arg_mgr = ArgumentManager(self.paths.arguments_file)
 
