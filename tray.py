@@ -27,15 +27,27 @@ APPDATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── UI Helpers ──────────────────────────────────────────────────────────────
 
+def _show_message_impl(flags: int, msg: str, title: str):
+    """Internal function to show message box in a thread."""
+    ctypes.windll.user32.MessageBoxW(0, msg, title, flags | 0x40000)
+    
 def show_error(msg: str, title: str = "UxPlay Error"):
-    """Show a critical error popup."""
-    # 0x10 = MB_ICONHAND (Error), 0x40000 = MB_TOPMOST
-    ctypes.windll.user32.MessageBoxW(0, msg, title, 0x10 | 0x40000)
+    """Show a critical error popup (non-blocking)."""
+    # 0x10 = MB_ICONHAND (Error)
+    threading.Thread(
+        target=_show_message_impl,
+        args=(0x10, msg, title),
+        daemon=True
+    ).start()
 
 def show_warning(msg: str, title: str = "UxPlay Warning"):
-    """Show a warning popup."""
-    # 0x30 = MB_ICONEXCLAMATION (Warning), 0x40000 = MB_TOPMOST
-    ctypes.windll.user32.MessageBoxW(0, msg, title, 0x30 | 0x40000)
+    """Show a warning popup (non-blocking)."""
+    # 0x30 = MB_ICONEXCLAMATION (Warning)
+    threading.Thread(
+        target=_show_message_impl,
+        args=(0x30, msg, title),
+        daemon=True
+    ).start()
 
 # ─── Logging Setup ────────────────────────────────────────────────────────────
 
@@ -333,7 +345,7 @@ class Application:
         # Check for existing instance using a named mutex
         self._mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\UxPlayWindowsTrayMutex")
         if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-            show_error("UxPlay Windows is already running.", "Error")
+            ctypes.windll.user32.MessageBoxW(0, "UxPlay Windows is already running.", "Error", 0x10 | 0x40000)
             sys.exit(1)
 
         self.paths = Paths()
