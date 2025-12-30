@@ -425,4 +425,3 @@ D:\a\uxplay-windows\uxplay-windows\UxPlay\build\artifact\lib\gstreamer-1.0\libgs
 D:\a\uxplay-windows\uxplay-windows\UxPlay\build\artifact\lib\gstreamer-1.0\libgsty4mdec.dll
 D:\a\uxplay-windows\uxplay-windows\UxPlay\build\artifact\lib\gstreamer-1.0\libgsty4menc.dll
 D:\a\uxplay-windows\uxplay-windows\UxPlay\build\artifact\lib\gstreamer-1.0\libgstzbar.dll
-D:\a\uxplay-windows\uxplay-windows\UxPlay\build\artifact\lib\gstreamer-1.0\libgstcurl.dll
